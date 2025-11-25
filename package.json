@@ -1,0 +1,29 @@
+{
+  "name": "ca-2-server-side-programming-mikealme13",
+  "version": "1.0.0",
+  "description": "[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/gCxlkD7T)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CCT-Dublin/ca-2-server-side-programming-MikeAlme13.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/CCT-Dublin/ca-2-server-side-programming-MikeAlme13/issues"
+  },
+  "homepage": "https://github.com/CCT-Dublin/ca-2-server-side-programming-MikeAlme13#readme",
+  "dependencies": {
+    "body-parser": "^2.2.1",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "mysql2": "^3.15.3"
+  }
+}
