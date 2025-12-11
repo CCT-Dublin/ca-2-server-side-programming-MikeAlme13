@@ -1,105 +1,197 @@
 // index.js
 require('dotenv').config();
 const express = require('express');
-const helmet = require('helmet');
-const bodyParser = require('body-parser');
+const mysql = require('mysql2/promise');
 const csv = require('csv-parser');
 const fs = require('fs');
-const { createTableIfNotExists, insertRecord } = require('./database');
+const path = require('path');
+const bodyParser = require('body-parser');
+const helmet = require('helmet');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware for security headers
 app.use(helmet());
-
-// Middleware to parse JSON and URL encoded data
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
-
-// Middleware to log incoming requests
+// Set Content Security Policy (adjust sources as needed)
 app.use((req, res, next) => {
-  console.log(`${req.method} request to ${req.url}`);
+  res.setHeader("Content-Security-Policy", "default-src 'self'");
   next();
 });
 
-// Middleware to check if DB and table exist before requests that save data
-app.use(async (req, res, next) => {
-  try {
-    await createTableIfNotExists();
-    next();
-  } catch (err) {
-    console.error('DB/Table setup error:', err);
-    res.status(500).send('Database error.');
-  }
-});
-
-// Serve static files (form.html)
+// Serve static files (like form.html) from 'public' folder
 app.use(express.static('public'));
 
-// CSV validation function
+// Middleware to parse JSON and URL-encoded data
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
+// Create MySQL connection pool
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+// Ensure the database table exists
+async function ensureTable() {
+  const createTableSQL = `
+    CREATE TABLE IF NOT EXISTS mysql_table (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      first_name VARCHAR(100),
+      second_name VARCHAR(100),
+      email VARCHAR(150),
+      phone_number VARCHAR(20),
+      eircode VARCHAR(20)
+    )
+  `;
+  const conn = await pool.getConnection();
+  try {
+    await conn.query(createTableSQL);
+  } finally {
+    conn.release();
+  }
+}
+
+// Validation functions
+function isValidName(name) {
+  return /^[a-zA-Z0-9]{1,20}$/.test(name);
+}
+
+function isValidEmail(email) {
+  // simple email regex
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isValidPhone(phone) {
+  return /^\d{10}$/.test(phone);
+}
+
+function isValidEircode(eircode) {
+  return /^[0-9][a-zA-Z0-9]{5}$/.test(eircode);
+}
+
+// Validate entire record (object with keys: first_name, second_name, email, phone_number, eircode)
 function validateRecord(record) {
-  const nameRegex = /^[a-zA-Z0-9]{1,20}$/;
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const phoneRegex = /^\d{10}$/;
-  const eircodeRegex = /^[0-9][a-zA-Z0-9]{5}$/;
-
-  if (!nameRegex.test(record.first_name)) return false;
-  if (!nameRegex.test(record.second_name)) return false;
-  if (!emailRegex.test(record.email)) return false;
-  if (!phoneRegex.test(record.phone_number)) return false;
-  if (!eircodeRegex.test(record.eircode)) return false;
-
+  if (
+    !isValidName(record.first_name) ||
+    !isValidName(record.second_name) ||
+    !isValidEmail(record.email) ||
+    !isValidPhone(record.phone_number) ||
+    !isValidEircode(record.eircode)
+  ) {
+    return false;
+  }
   return true;
 }
 
-// Route to process CSV upload (assuming CSV file is in project root, e.g., data.csv)
+// Insert a record into DB
+async function insertRecord(record) {
+  const conn = await pool.getConnection();
+  try {
+    const sql = `INSERT INTO mysql_table (first_name, second_name, email, phone_number, eircode)
+                 VALUES (?, ?, ?, ?, ?)`;
+    const values = [
+      record.first_name,
+      record.second_name,
+      record.email,
+      record.phone_number,
+      record.eircode
+    ];
+    await conn.query(sql, values);
+  } finally {
+    conn.release();
+  }
+}
+
+// Route: Import CSV and insert valid rows only
 app.get('/import-csv', async (req, res) => {
   const results = [];
-  const errors = [];
+  const invalidRows = [];
+  let rowNum = 1; // Starting from 1 for data rows (assuming header row in CSV)
 
-  let rowNum = 1;
-  fs.createReadStream('data.csv')
+  fs.createReadStream(path.join(__dirname, 'data.csv'))
     .pipe(csv())
     .on('data', (data) => {
-      if (validateRecord(data)) {
-        results.push(data);
-      } else {
-        errors.push(`Row ${rowNum} invalid`);
-      }
       rowNum++;
+      // Normalize keys to snake_case if needed
+      const record = {
+        first_name: data.first_name,
+        second_name: data.second_name,
+        email: data.email,
+        phone_number: data.phone_number,
+        eircode: data.eircode
+      };
+
+      if (validateRecord(record)) {
+        results.push(record);
+      } else {
+        invalidRows.push(rowNum);
+      }
     })
     .on('end', async () => {
       try {
-        for (const record of results) {
-          await insertRecord(record);
+        // Make sure table exists before inserting
+        await ensureTable();
+
+        // Insert valid records sequentially (could optimize with bulk insert if desired)
+        for (const rec of results) {
+          await insertRecord(rec);
         }
-        res.send(`Imported ${results.length} records. Errors: ${errors.join(', ')}`);
+
+        const msg = `Imported ${results.length} valid record(s).`;
+        const errorMsg = invalidRows.length > 0 ? ` Invalid rows: ${invalidRows.join(', ')}` : '';
+        res.send(msg + errorMsg);
       } catch (err) {
-        console.error(err);
-        res.status(500).send('Error inserting records');
+        console.error('Error importing CSV:', err);
+        res.status(500).send('Server error during CSV import.');
       }
     });
 });
 
-// Route to accept form data submission (POST)
+// Route: Handle form POST submission
 app.post('/submit-form', async (req, res) => {
-  const data = req.body;
+  const record = {
+    first_name: req.body.first_name,
+    second_name: req.body.second_name,
+    email: req.body.email,
+    phone_number: req.body.phone_number,
+    eircode: req.body.eircode
+  };
 
-  if (!validateRecord(data)) {
+  if (!validateRecord(record)) {
     return res.status(400).send('Invalid data submitted.');
   }
 
   try {
-    await insertRecord(data);
+    await ensureTable();
+    await insertRecord(record);
     res.send('Data submitted successfully.');
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Server error while saving data.');
+    console.error('Error inserting form data:', err);
+    res.status(500).send('Server error.');
+  }
+});
+
+// Middleware to check if server port is running (basic example)
+app.use((req, res, next) => {
+  if (!PORT) {
+    res.status(500).send('Server port not configured.');
+  } else {
+    next();
   }
 });
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, async () => {
+  try {
+    await ensureTable();
+    console.log(`Server running on port ${PORT}`);
+  } catch (err) {
+    console.error('Error creating table:', err);
+  }
 });

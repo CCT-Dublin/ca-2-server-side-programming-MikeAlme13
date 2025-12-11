@@ -1,0 +1,4 @@
+first_name,second_name,email,phone_number,eircode
+John,Doe,john.doe@example.com,0123456789,1ABC23
+Jane,Smith,jane.smith@example.com,0987654321,2DEF45
+Invalid,User,invalidemail,123456789,ABC123
