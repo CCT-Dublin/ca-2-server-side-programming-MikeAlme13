@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Submit Your Data</title>
+  <script>
+    function validateForm() {
+      const firstName = document.forms["userForm"]["first_name"].value.trim();
+      const secondName = document.forms["userForm"]["second_name"].value.trim();
+      const email = document.forms["userForm"]["email"].value.trim();
+      const phone = document.forms["userForm"]["phone_number"].value.trim();
+      const eircode = document.forms["userForm"]["eircode"].value.trim();
+
+      const nameRegex = /^[a-zA-Z0-9]{1,20}$/;
+      if (!nameRegex.test(firstName)) {
+        alert("First name must be alphanumeric and max 20 characters.");
+        return false;
+      }
+      if (!nameRegex.test(secondName)) {
+        alert("Second name must be alphanumeric and max 20 characters.");
+        return false;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        alert("Please enter a valid email.");
+        return false;
+      }
+      if (!/^\d{10}$/.test(phone)) {
+        alert("Phone number must be exactly 10 digits.");
+        return false;
+      }
+      if (!/^[0-9][a-zA-Z0-9]{5}$/.test(eircode)) {
+        alert("Eircode must start with a number and be 6 alphanumeric characters.");
+        return false;
+      }
+      return true;
+    }
+  </script>
+</head>
+<body>
+  <h2>User Data Submission Form</h2>
+  <form name="userForm" method="POST" action="/submit-form" onsubmit="return validateForm()">
+    <label>First Name: <input type="text" name="first_name" required maxlength="20" /></label><br/><br/>
+    <label>Second Name: <input type="text" name="second_name" required maxlength="20" /></label><br/><br/>
+    <label>Email: <input type="email" name="email" required /></label><br/><br/>
+    <label>Phone Number: <input type="text" name="phone_number" required maxlength="10" minlength="10" /></label><br/><br/>
+    <label>Eircode: <input type="text" name="eircode" required maxlength="6" minlength="6" /></label><br/><br/>
+    <button type="submit">Submit</button>
+  </form>
+</body>
+</html>
