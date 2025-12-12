@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Submit Data Form</title>
+  <script>
+    function validateForm() {
+      const firstName = document.forms["userForm"]["first_name"].value.trim();
+      const secondName = document.forms["userForm"]["second_name"].value.trim();
+      const email = document.forms["userForm"]["email"].value.trim();
+      const phone = document.forms["userForm"]["phone_number"].value.trim();
+      const eircode = document.forms["userForm"]["eircode"].value.trim();
+
+      const nameRegex = /^[a-zA-Z0-9]{1,20}$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const phoneRegex = /^\d{10}$/;
+      const eircodeRegex = /^[0-9][a-zA-Z0-9]{5}$/;
+
+      if (!nameRegex.test(firstName)) {
+        alert("Invalid first name. Letters/numbers max 20 characters.");
+        return false;
+      }
+      if (!nameRegex.test(secondName)) {
+        alert("Invalid second name. Letters/numbers max 20 characters.");
+        return false;
+      }
+      if (!emailRegex.test(email)) {
+        alert("Invalid email format.");
+        return false;
+      }
+      if (!phoneRegex.test(phone)) {
+        alert("Phone number must be exactly 10 digits.");
+        return false;
+      }
+      if (!eircodeRegex.test(eircode)) {
+        alert("Eircode must start with a number, be alphanumeric, exactly 6 characters.");
+        return false;
+      }
+      return true;
+    }
+
+    async function submitForm(event) {
+      event.preventDefault();
+      if (!validateForm()) return;
+
+      const formData = {
+        first_name: document.forms["userForm"]["first_name"].value.trim(),
+        second_name: document.forms["userForm"]["second_name"].value.trim(),
+        email: document.forms["userForm"]["email"].value.trim(),
+        phone_number: document.forms["userForm"]["phone_number"].value.trim(),
+        eircode: document.forms["userForm"]["eircode"].value.trim()
+      };
+
+      try {
+        const response = await fetch('/submit-form', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        });
+        const text = await response.text();
+        alert(text);
+        if (response.ok) {
+          document.forms["userForm"].reset();
+        }
+      } catch (err) {
+        alert("Error submitting form.");
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1>User Data Submission Form</h1>
+  <form name="userForm" onsubmit="submitForm(event)">
+    <label>First Name: <input type="text" name="first_name" required></label><br><br>
+    <label>Second Name: <input type="text" name="second_name" required></label><br><br>
+    <label>Email: <input type="email" name="email" required></label><br><br>
+    <label>Phone Number: <input type="text" name="phone_number" required></label><br><br>
+    <label>Eircode: <input type="text" name="eircode" required></label><br><br>
+    <button type="submit">Submit</button>
+  </form>
+</body>
+</html>
