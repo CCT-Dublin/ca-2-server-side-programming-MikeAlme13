@@ -1,3 +1,4 @@
+// index.js
 require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
@@ -10,20 +11,20 @@ const { createTableIfNotExists, insertRecord } = require('./database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Middleware for security headers
 app.use(helmet());
 
+// Middleware to parse JSON and URL encoded data
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-app.use(express.static('public'));
-
-// Log each request
+// Middleware to log incoming requests
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  console.log(`${req.method} request to ${req.url}`);
   next();
 });
 
-// Ensure table exists before handling requests that insert data
+// Middleware to check if DB and table exist before requests that save data
 app.use(async (req, res, next) => {
   try {
     await createTableIfNotExists();
@@ -34,7 +35,10 @@ app.use(async (req, res, next) => {
   }
 });
 
-// Validation function
+// Serve static files (form.html in public/)
+app.use(express.static('public'));
+
+// CSV validation function
 function validateRecord(record) {
   const nameRegex = /^[a-zA-Z0-9]{1,20}$/;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -50,14 +54,25 @@ function validateRecord(record) {
   return true;
 }
 
-// Route to import CSV (GET)
+// Route to process CSV import
 app.get('/import-csv', async (req, res) => {
   const results = [];
   const errors = [];
 
-  let rowNum = 1;
-  fs.createReadStream(path.join(__dirname, 'data.csv'))
+  const filePath = path.join(__dirname, 'data.csv'); // Absolute path to data.csv
+
+  // Check if file exists before reading
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('CSV file data.csv not found in project folder.');
+  }
+
+  let rowNum = 2; // Start at 2 because CSV header is row 1
+  fs.createReadStream(filePath)
     .pipe(csv())
+    .on('error', (err) => {
+      console.error('CSV Read Error:', err.message);
+      return res.status(500).send('Could not read CSV file.');
+    })
     .on('data', (data) => {
       if (validateRecord(data)) {
         results.push(data);
@@ -71,19 +86,15 @@ app.get('/import-csv', async (req, res) => {
         for (const record of results) {
           await insertRecord(record);
         }
-        res.send(`Imported ${results.length} records.<br>Errors: ${errors.join(', ') || 'None'}`);
+        res.send(`Imported ${results.length} records. Errors: ${errors.join(', ') || 'None'}`);
       } catch (err) {
-        console.error(err);
-        res.status(500).send('Error inserting records.');
+        console.error('DB Insert Error:', err);
+        res.status(500).send('Error inserting records into database.');
       }
-    })
-    .on('error', (err) => {
-      console.error('CSV read error:', err);
-      res.status(500).send('Error reading CSV file.');
     });
 });
 
-// Route to accept form POST submission
+// Route to accept form data submission (POST)
 app.post('/submit-form', async (req, res) => {
   const data = req.body;
 
@@ -95,11 +106,12 @@ app.post('/submit-form', async (req, res) => {
     await insertRecord(data);
     res.send('Data submitted successfully.');
   } catch (err) {
-    console.error(err);
+    console.error('Server error:', err);
     res.status(500).send('Server error while saving data.');
   }
 });
 
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
